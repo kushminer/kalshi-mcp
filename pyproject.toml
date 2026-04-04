@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kalshi-mcp"
+version = "0.1.0"
+description = "MCP server for the Kalshi prediction market API"
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp[cli]",
+    "httpx",
+    "cryptography",
+]
+
+[project.scripts]
+kalshi-mcp = "kalshi_mcp.server:main"
