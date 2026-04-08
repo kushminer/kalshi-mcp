@@ -1,7 +1,12 @@
-"""MCP server exposing Kalshi prediction market API as tools."""
+"""MCP server exposing Kalshi prediction market API as tools.
+
+Hardened fork — trading tools gated behind KALSHI_ENABLE_TRADING=true,
+base URL validated against allowed Kalshi domains.
+"""
 
 import json
 import os
+import re
 
 from mcp.server.fastmcp import FastMCP
 
@@ -11,6 +16,14 @@ mcp = FastMCP("kalshi")
 
 # Lazily initialized client (created on first tool call).
 _client: KalshiClient | None = None
+
+ALLOWED_DOMAINS = re.compile(
+    r"^https://(api\.elections\.kalshi\.com|demo-api\.kalshi\.co)"
+)
+
+
+def _trading_enabled() -> bool:
+    return os.environ.get("KALSHI_ENABLE_TRADING", "").lower() == "true"
 
 
 def _get_client() -> KalshiClient:
@@ -22,6 +35,11 @@ def _get_client() -> KalshiClient:
             "KALSHI_API_BASE_URL",
             "https://api.elections.kalshi.com/trade-api/v2",
         )
+        if not ALLOWED_DOMAINS.match(base_url):
+            raise RuntimeError(
+                f"KALSHI_API_BASE_URL must point to an official Kalshi domain "
+                f"(api.elections.kalshi.com or demo-api.kalshi.co), got: {base_url}"
+            )
         if not api_key or not private_key_path:
             raise RuntimeError(
                 "KALSHI_API_KEY and KALSHI_PRIVATE_KEY_PATH environment "
@@ -327,7 +345,7 @@ async def create_order(
     time_in_force: str | None = None,
     expiration_ts: int | None = None,
 ) -> str:
-    """Place a new order on a market.
+    """Place a new order on a market. Requires KALSHI_ENABLE_TRADING=true.
 
     Args:
         ticker: Market ticker to trade.
@@ -341,6 +359,8 @@ async def create_order(
         time_in_force: Time in force: fill_or_kill, good_till_canceled, immediate_or_cancel.
         expiration_ts: Expiration Unix timestamp in milliseconds.
     """
+    if not _trading_enabled():
+        return _json({"error": "Trading disabled. Set KALSHI_ENABLE_TRADING=true to enable."})
     result = await _get_client().create_order(
         ticker=ticker,
         side=side,
@@ -358,11 +378,13 @@ async def create_order(
 
 @mcp.tool()
 async def cancel_order(order_id: str) -> str:
-    """Cancel an existing order.
+    """Cancel an existing order. Requires KALSHI_ENABLE_TRADING=true.
 
     Args:
         order_id: The order ID to cancel.
     """
+    if not _trading_enabled():
+        return _json({"error": "Trading disabled. Set KALSHI_ENABLE_TRADING=true to enable."})
     result = await _get_client().cancel_order(order_id)
     return _json(result)
 
